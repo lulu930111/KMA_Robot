@@ -5,23 +5,36 @@ using UnityEngine.UI;
 using TriLibCore.SFB;
 using System.IO;
 using System.Linq;
+using RootMotion.Demos;
+using UnityEngine.Networking;
 
 public class KRGameMangager : MonoBehaviour
 {
     [Header("UI")]
     public CanvasGroup CG_System;
     public InputField INP_FileName;
+    public InputField INP_ImageExtension;
+    public InputField INP_SoundExtension;
     public List<Text> listDirPathText;
     public List<Button> listDirButton;
     public List<Image> listOutputImage;
+    public AudioSource AUD_Sound;
 
     [Header("Runtime Data")]
     [SerializeField] string fileName;
+    [SerializeField] string imageExtension;
+    [SerializeField] string soundExtension;
     [SerializeField] List<string> listDirPath;
     [SerializeField] List<Texture2D> createdTexture;
     [SerializeField] List<Sprite> createdSprite;
     
     private readonly string[] VALID_IMAGE_EXTENSIONS = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
+    private readonly Dictionary<string, AudioType> AUDIO_TYPE_MAP = new Dictionary<string, AudioType>
+    {
+        {".wav", AudioType.WAV},
+        {".mp3", AudioType.MPEG},
+        {".ogg", AudioType.OGGVORBIS}
+    };
 
     void Start()
     {
@@ -34,7 +47,10 @@ public class KRGameMangager : MonoBehaviour
             listDirPathText[i].text = listDirPath[i];
         }
 
-
+        INP_ImageExtension.onValueChanged.AddListener(OnChangeImageExtension);  
+        INP_ImageExtension.text = SystemConfig.Instance.GetData<string>("imgExt", "Null");
+        INP_SoundExtension.onValueChanged.AddListener(OnChangeSoundExtension);
+        INP_SoundExtension.text = SystemConfig.Instance.GetData<string>("sndExt", "Null");
         INP_FileName.onValueChanged.AddListener(OnChangeFileName);
         INP_FileName.text = SystemConfig.Instance.GetData<string>("FileName", "Null");
 
@@ -58,6 +74,17 @@ public class KRGameMangager : MonoBehaviour
         fileName = _fileName;
 
         LoadImages(fileName);
+        LoadSound(fileName);
+    }
+
+    void OnChangeImageExtension(string _imageExtension){
+        SystemConfig.Instance.SaveData("imgExt", _imageExtension);
+        imageExtension = _imageExtension;
+    }
+
+    void OnChangeSoundExtension(string _soundExtension){
+        SystemConfig.Instance.SaveData("sndExt", _soundExtension);
+        soundExtension = _soundExtension;
     }
 
     void SetupDictionary(int index)
@@ -82,11 +109,11 @@ public class KRGameMangager : MonoBehaviour
     void LoadImages(string _fileName){
         ClearPreviousResources();
         
-        for (int i = 0; i < listDirPath.Count; i++)
+        for (int i = 0; i < listOutputImage.Count; i++)
         {
             try {
                 string dirPath = listDirPath[i];
-                string file = Path.Combine(dirPath, _fileName);
+                string file = Path.Combine(dirPath, $"{_fileName}.{imageExtension}");
                 
                 if (File.Exists(file)) {
                     listOutputImage[i].sprite = LoadSprite(file);
@@ -99,6 +126,17 @@ public class KRGameMangager : MonoBehaviour
                 Debug.LogError($"Error loading image {i}: {e.Message}");
                 listOutputImage[i].sprite = null;
             }
+        }
+    }
+
+    void LoadSound(string _fileName){
+        string dirPath = listDirPath.Last();
+        string file = Path.Combine(dirPath, $"{_fileName}.{soundExtension}");
+        if (File.Exists(file)) {
+            AUD_Sound.clip = LoadAudioClip(file);
+            AUD_Sound.Play();
+        } else {
+            AUD_Sound.Stop();
         }
     }
 
@@ -147,6 +185,34 @@ public class KRGameMangager : MonoBehaviour
         catch (System.Exception e)
         {
             Debug.LogError($"Error in LoadSprite: {e.Message}");
+            return null;
+        }
+    }
+
+    AudioClip LoadAudioClip(string filePath){
+        try {
+            string extension = Path.GetExtension(filePath).ToLower();
+            if (!AUDIO_TYPE_MAP.ContainsKey(extension))
+            {
+                Debug.LogError($"Unsupported audio format: {extension}. Supported formats: {string.Join(", ", AUDIO_TYPE_MAP.Keys)}");
+                return null;
+            }
+
+            string url = "file://" + filePath;
+            using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(url, AUDIO_TYPE_MAP[extension]))
+            {
+                www.SendWebRequest();
+                while (!www.isDone) { }
+
+                if (www.result == UnityWebRequest.Result.Success)
+                {
+                    return DownloadHandlerAudioClip.GetContent(www);
+                }
+            }
+            return null;
+        }
+        catch (System.Exception e) {
+            Debug.LogError($"Error in LoadAudioClip: {e.Message}");
             return null;
         }
     }
