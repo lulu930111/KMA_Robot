@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using RootMotion.Demos;
 using UnityEngine.Networking;
+using System.Threading.Tasks;
 
 public class KRGameMangager : MonoBehaviour
 {
@@ -27,6 +28,7 @@ public class KRGameMangager : MonoBehaviour
     [SerializeField] List<string> listDirPath;
     [SerializeField] List<Texture2D> createdTexture;
     [SerializeField] List<Sprite> createdSprite;
+    [SerializeField] List<AudioClip> createdAudioClips = new List<AudioClip>();
     
     private readonly string[] VALID_IMAGE_EXTENSIONS = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
     private readonly Dictionary<string, AudioType> AUDIO_TYPE_MAP = new Dictionary<string, AudioType>
@@ -129,37 +131,6 @@ public class KRGameMangager : MonoBehaviour
         }
     }
 
-    void LoadSound(string _fileName){
-        string dirPath = listDirPath.Last();
-        string file = Path.Combine(dirPath, $"{_fileName}.{soundExtension}");
-        if (File.Exists(file)) {
-            AUD_Sound.clip = LoadAudioClip(file);
-            AUD_Sound.Play();
-        } else {
-            AUD_Sound.Stop();
-        }
-    }
-
-    private void ClearPreviousResources()
-    {
-        foreach (var texture in createdTexture)
-        {
-            if (texture != null)
-            {
-                Destroy(texture);
-            }
-        }
-        foreach (var sprite in createdSprite)
-        {
-            if (sprite != null)
-            {
-                Destroy(sprite);
-            }
-        }
-        createdTexture.Clear();
-        createdSprite.Clear();
-    }
-
     Sprite LoadSprite(string filePath){
         try {
             string extension = Path.GetExtension(filePath).ToLower();
@@ -189,7 +160,29 @@ public class KRGameMangager : MonoBehaviour
         }
     }
 
-    AudioClip LoadAudioClip(string filePath){
+    private async void LoadSound(string _fileName){
+        string dirPath = listDirPath.Last();
+        if (dirPath == "Null")
+        {
+            Debug.LogWarning("Sound directory path not set");
+            return;
+        }
+
+        string file = Path.Combine(dirPath, $"{_fileName}.{soundExtension}");
+        if (File.Exists(file)) {
+            AUD_Sound.clip = await LoadAudioClipAsync(file);
+            if (AUD_Sound.clip != null)
+            {
+                createdAudioClips.Add(AUD_Sound.clip);
+                AUD_Sound.Play();
+            }
+        } else {
+            AUD_Sound.Stop();
+        }
+    }
+
+    private async Task<AudioClip> LoadAudioClipAsync(string filePath)
+    {
         try {
             string extension = Path.GetExtension(filePath).ToLower();
             if (!AUDIO_TYPE_MAP.ContainsKey(extension))
@@ -201,20 +194,56 @@ public class KRGameMangager : MonoBehaviour
             string url = "file://" + filePath;
             using (UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(url, AUDIO_TYPE_MAP[extension]))
             {
-                www.SendWebRequest();
-                while (!www.isDone) { }
+                var operation = www.SendWebRequest();
+                while (!operation.isDone)
+                {
+                    await Task.Yield();
+                }
 
                 if (www.result == UnityWebRequest.Result.Success)
                 {
                     return DownloadHandlerAudioClip.GetContent(www);
                 }
+                else
+                {
+                    Debug.LogError($"Failed to load audio: {www.error}");
+                    return null;
+                }
             }
-            return null;
         }
         catch (System.Exception e) {
-            Debug.LogError($"Error in LoadAudioClip: {e.Message}");
+            Debug.LogError($"Error in LoadAudioClipAsync: {e.Message}");
             return null;
         }
+    }
+
+    private void ClearPreviousResources()
+    {
+        foreach (var texture in createdTexture)
+        {
+            if (texture != null)
+            {
+                Destroy(texture);
+            }
+        }
+        foreach (var sprite in createdSprite)
+        {
+            if (sprite != null)
+            {
+                Destroy(sprite);
+            }
+        }
+        createdTexture.Clear();
+        createdSprite.Clear();
+
+        foreach (var clip in createdAudioClips)
+        {
+            if (clip != null)
+            {
+                Destroy(clip);
+            }
+        }
+        createdAudioClips.Clear();
     }
 
     void OnDestroy()
