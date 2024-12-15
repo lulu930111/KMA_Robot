@@ -16,9 +16,10 @@ public class KRGameMangager : MonoBehaviour
     public InputField INP_FileName;
     public InputField INP_ImageExtension;
     public InputField INP_SoundExtension;
-    public List<Text> listDirPathText;
+    public List<InputField> listDirPathInput;
     public List<Button> listDirButton;
     public List<Image> listOutputImage;
+    public Button BTN_Update;
     public AudioSource AUD_Sound;
 
     [Header("Runtime Data")]
@@ -43,10 +44,16 @@ public class KRGameMangager : MonoBehaviour
         listDirPath = new List<string>();
         createdTexture = new List<Texture2D>();
         createdSprite = new List<Sprite>();
-        for (int i = 0; i < listDirPathText.Count; i++)
+        for (int i = 0; i < listDirPathInput.Count; i++)
         {
+            int index = i;
+            listDirPathInput[i].onValueChanged.AddListener( x => {
+                SystemConfig.Instance.SaveData($"dir{index}", x);
+                listDirPath[index] = x;
+            });
+
             listDirPath.Add(SystemConfig.Instance.GetData<string>($"dir{i}", "Null"));
-            listDirPathText[i].text = listDirPath[i];
+            listDirPathInput[i].text = listDirPath[i];
         }
 
         INP_ImageExtension.onValueChanged.AddListener(OnChangeImageExtension);  
@@ -55,6 +62,11 @@ public class KRGameMangager : MonoBehaviour
         INP_SoundExtension.text = SystemConfig.Instance.GetData<string>("sndExt", "Null");
         INP_FileName.onValueChanged.AddListener(OnChangeFileName);
         INP_FileName.text = SystemConfig.Instance.GetData<string>("FileName", "Null");
+
+        BTN_Update.onClick.AddListener(() => {
+            LoadImages(fileName);
+            LoadSound(fileName);
+        });
 
         for (int i = 0; i < listDirButton.Count; i++)
         {
@@ -68,6 +80,10 @@ public class KRGameMangager : MonoBehaviour
         {
             CG_System.blocksRaycasts = !CG_System.blocksRaycasts;
             CG_System.alpha = CG_System.alpha == 1 ? 0 : 1;
+        }
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            Application.Quit();
         }
     }
 
@@ -100,9 +116,9 @@ public class KRGameMangager : MonoBehaviour
             {
                 string dirPath = result[0].Name;
 
-                if (listDirPathText[index]) listDirPathText[index].text = dirPath;
-                SystemConfig.Instance.SaveData($"dir{index}", dirPath);
-                listDirPath[index] = dirPath;
+                if (listDirPathInput[index]) listDirPathInput[index].text = dirPath;
+                // SystemConfig.Instance.SaveData($"dir{index}", dirPath);
+                // listDirPath[index] = dirPath;
                 Debug.Log("Success");
             }
         }
